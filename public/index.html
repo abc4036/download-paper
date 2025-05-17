@@ -77,7 +77,10 @@
         const idx = String(count).padStart(2, '0');
         const url = `${base}${idx}${ext}`;
         try {
-          const res = await fetch(url);
+          const PROXY = location.origin + "/functions/proxy?url=";
+          const res = await fetch(PROXY + encodeURIComponent(originalUrl));
+
+          // const res = await fetch(url);
           // const res = await tryFetchWithProxies(url);
 
           if (res.status === 404) break;
