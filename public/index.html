@@ -77,7 +77,7 @@
         const idx = String(count).padStart(2, '0');
         const url = `${base}${idx}${ext}`;
         try {
-          const PROXY = location.origin + "/functions/proxy?url=";
+          const PROXY = location.origin + "/proxy?url=";
           const res = await fetch(PROXY + encodeURIComponent(url));
 
           // const res = await fetch(url);
