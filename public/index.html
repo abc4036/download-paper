@@ -78,7 +78,7 @@
         const url = `${base}${idx}${ext}`;
         try {
           const PROXY = location.origin + "/functions/proxy?url=";
-          const res = await fetch(PROXY + encodeURIComponent(originalUrl));
+          const res = await fetch(PROXY + encodeURIComponent(url));
 
           // const res = await fetch(url);
           // const res = await tryFetchWithProxies(url);
