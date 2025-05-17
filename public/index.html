@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>A-Level Paper Merger</title>
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 2em auto; }
+    input { width: 100%; padding: .5em; margin-bottom: 1em; }
+    button { padding: .5em 1em; }
+    #message { color: red; margin-top: .5em; }
+  </style>
+</head>
+<body>
+
+  <h2>Merge A-Level Maths Past Paper</h2>
+  <input id="urlInput" placeholder="Paste the URL for page 1 (e.g. …Q_01.pdf)" />
+  <button id="downloadBtn">Download Paper &amp; Scheme</button>
+  <div id="message"></div>
+
+  <script>
+  (async () => {
+    const { PDFDocument } = PDFLib;
+    const urlInput = document.getElementById('urlInput');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const messageDiv = document.getElementById('message');
+    const PROXIES = [
+      url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+    ];
+
+    // Normalize URL: strip /Full?file_name= if present
+    function normalizeUrl(raw) {
+      // 1. Parse as a real URL
+      const u = new URL(raw);
+
+      // 2. Remove the Full?file_name= wrapper if present
+      //    (u.search starts with "?file_name=/exams/…")
+      let pathname = u.pathname;
+      if (u.searchParams.has('file_name')) {
+        pathname = u.searchParams.get('file_name');
+      }
+
+      // 3. Build an absolute URL again
+      return `${u.origin}${pathname}`;
+    }
+
+
+    // Split URL into [base, prefix, counterFormat, extension]
+    // e.g. base="…/202406_9MA0_01_Q_", counterFormat="01", ext=".pdf"
+    function splitUrl(url) {
+      const m = url.match(/^(.*_)(\d{2})(\.[^/.]+)$/);
+      if (!m) return null;
+      return { base: m[1], startCount: m[2], ext: m[3] };
+    }
+
+    
+    async function tryFetchWithProxies(url) {
+      for (const mkUrl of PROXIES) {
+        try {
+          const res = await fetch(mkUrl(url));
+          if (res.ok) return res;
+          if (res.status === 404) return res;    // stop on 404
+        } catch (_e) {
+          // try next proxy
+        }
+      }
+      throw new Error('All proxies failed');
+    }
+
+    // Loop-fetch pages, merge into one PDF; returns merged Uint8Array
+    async function fetchAndMerge(base, ext, label) {
+      const mergedPdf = await PDFDocument.create();
+      let count = 1;
+      let fetchedAny = false;
+
+      while (true) {
+        const idx = String(count).padStart(2, '0');
+        const url = `${base}${idx}${ext}`;
+        try {
+          const res = await fetch(url);
+          // const res = await tryFetchWithProxies(url);
+
+          if (res.status === 404) break;
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.arrayBuffer();
+          const pdf = await PDFDocument.load(data);
+          const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+          pages.forEach(p => mergedPdf.addPage(p));
+          fetchedAny = true;
+          count += 1;
+        } catch (e) {
+          console.error('Fetch error at', url, e);
+          break;
+        }
+      }
+
+      if (!fetchedAny) throw new Error(`${label} not found`);
+      return mergedPdf.save();
+    }
+
+    function triggerDownload(bytes, filename) {
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    downloadBtn.addEventListener('click', async () => {
+      messageDiv.textContent = '';
+      downloadBtn.disabled = true;
+
+      try {
+        let rawUrl = urlInput.value.trim();
+        if (!rawUrl) throw new Error('Please paste a URL');
+        console.log("BEFORE", rawUrl);
+        rawUrl = normalizeUrl(rawUrl);
+        console.log("AFTER", rawUrl);
+
+        const parts = splitUrl(rawUrl);
+        if (!parts) throw new Error('URL must end with a two-digit page number, e.g. `_01.pdf`');
+
+        // Merge question paper (label 'Q')
+        const labelQ = parts.base.endsWith('_Q_') ? 'Q' : parts.base.slice(-2, -1);
+        const baseQ = parts.base;  // e.g. …_Q_
+        const mergedQ = await fetchAndMerge(baseQ, parts.ext, 'Question paper');
+        const filenameQ = rawUrl
+          .split('/').pop()
+          .replace(`_${parts.startCount}`, '')
+          .replace(parts.ext, '');
+        triggerDownload(mergedQ, `${filenameQ}${parts.ext}`);
+
+        // If this was a Q_01 URL, attempt marking scheme
+        if (labelQ === 'Q') {
+          const baseMS = parts.base.slice(0, -2) + 'MS_';
+          try {
+            const mergedMS = await fetchAndMerge(baseMS, parts.ext, 'Marking scheme');
+            const filenameMS = filenameQ.replace(/_Q$/, '_MS');
+            triggerDownload(mergedMS, `${filenameMS}${parts.ext}`);
+          } catch {
+            // silently ignore missing MS
+          }
+        }
+
+      } catch (err) {
+        messageDiv.textContent = err.message;
+      } finally {
+        downloadBtn.disabled = false;
+      }
+    });
+  })();
+  </script>
+
+</body>
+</html>
