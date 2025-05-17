@@ -78,6 +78,7 @@
         const url = `${base}${idx}${ext}`;
         try {
           const PROXY = location.origin + "/proxy?url=";
+          console.log("Using proxy URL:", PROXY + encodeURIComponent(url));
           const res = await fetch(PROXY + encodeURIComponent(url));
 
           // const res = await fetch(url);
