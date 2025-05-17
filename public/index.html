@@ -130,11 +130,17 @@
         const labelQ = parts.base.endsWith('_Q_') ? 'Q' : parts.base.slice(-2, -1);
         const baseQ = parts.base;  // e.g. …_Q_
         const mergedQ = await fetchAndMerge(baseQ, parts.ext, 'Question paper');
-        const filenameQ = rawUrl
-          .split('/').pop()
-          .replace(`_${parts.startCount}`, '')
-          .replace(parts.ext, '');
-        triggerDownload(mergedQ, `${filenameQ}${parts.ext}`);
+        // Given rawUrl = ".../202406_9FM0_01_Q_01.pdf"
+        const rawFilename = rawUrl.split('/').pop();  // "202406_9FM0_01_Q_01.pdf"
+
+        // Drop just the trailing "_01" before ".pdf"
+        const filenameBase = rawFilename.replace(/_\d{2}(?=\.pdf$)/, '');
+        // filenameBase == "202406_9FM0_01_Q.pdf"
+
+        // Now strip the .pdf
+        const filenameQ = filenameBase.replace(/\.pdf$/, '');
+        // filenameQ == "202406_9FM0_01_Q"
+        triggerDownload(mergedQ, `${filenameQ}.pdf`);
 
         // If this was a Q_01 URL, attempt marking scheme
         if (labelQ === 'Q') {
@@ -142,7 +148,7 @@
           try {
             const mergedMS = await fetchAndMerge(baseMS, parts.ext, 'Marking scheme');
             const filenameMS = filenameQ.replace(/_Q$/, '_MS');
-            triggerDownload(mergedMS, `${filenameMS}${parts.ext}`);
+            triggerDownload(mergedMS, `${filenameMS}.pdf`);
           } catch {
             // silently ignore missing MS
           }
